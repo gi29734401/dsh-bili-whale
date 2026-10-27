@@ -20,6 +20,8 @@ import zlib from 'node:zlib'
 import { execFileSync } from '../lib/capture.mjs'
 import { fileURLToPath } from 'node:url'
 import { config } from '../lib/config.mjs'
+// 2026-10-28：抽完帧顺手清理旧原片，只留最近 100 个（主人定），免得一个月攒十几 G
+import { pruneVideos } from '../lib/retention.mjs'
 import { dshPath } from '../lib/paths.mjs'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 
@@ -265,3 +267,9 @@ if (opt.score) {
 }
 console.log('\n══════════ 下一步（交给模型）══════════')
 console.log('用 read_image 看封面与九宫格，再把上面五路合起来写成结论 —— 脚本只备素材，不作判断。')
+
+// 2026-10-28 主人定：shots/video 里只保留最近 100 个原片（图不删，那才是要回看的）
+try {
+  const { total, kept, removed } = pruneVideos(path.join(dshPath('shots'), 'video'))
+  if (removed) console.log(`（清理：删掉 ${removed} 个旧原片，保留最近 ${kept} 个 / 共 ${total} 个）`)
+} catch { /* 清理失败不影响这一轮 */ }

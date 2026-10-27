@@ -10,6 +10,7 @@ import { apiGet } from '../lib/bili-api.mjs'
 // 依赖：ffmpeg（查找顺序见 lib/ffmpeg.mjs：$FFMPEG → PATH → bin/ → ~/.dsh/bili-whale/bin → 本机剪映）
 import fs from 'node:fs'
 import path from 'node:path'
+import { pruneVideos } from '../lib/retention.mjs'
 import { execFileSync } from '../lib/capture.mjs'
 import { requireFfmpeg } from '../lib/ffmpeg.mjs'
 import { dshPath } from '../lib/paths.mjs'
@@ -131,6 +132,11 @@ try {
   console.log('（字幕条版生成失败，忽略——不影响 SHEET）')
 }
 fs.rmSync(tmp, { recursive: true, force: true })
+// 2026-10-28 主人定：原片只留最近 100 个，更旧的自动删（图不删）
+try {
+  const r = pruneVideos(path.dirname(mp4))
+  if (r.removed) console.log(`（清理：删掉 ${r.removed} 个旧原片，保留最近 ${r.kept} 个 / 共 ${r.total} 个）`)
+} catch {}
 console.log(`（原片留着: ${mp4}；换参数重抽不必重新下载。加 --uniform 可强制等间隔）`)
 console.log('（提示：这条视频若有官方字幕，先跑 `node bili.mjs subtitles <BV>` 更省也更准——' +
   '抽帧是给"字幕没官方轨、或要看画面/界面"的情况用的）')
