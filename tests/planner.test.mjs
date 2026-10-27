@@ -86,6 +86,40 @@ test('share policy enforces switch, score, reason and rank for both transports',
     assert.throws(()=>validateShare({}, {...good,...patch}))
 })
 
+// ── 全天醒来上限（2026-10-27 主人要「7 点到 23 点每小时醒一次」）────────────────
+const hourly17 = () => Array.from({ length: 17 }, (_, i) => ({
+  start: `${String(7 + i).padStart(2, '0')}:00`,
+  end: `${String(8 + i).padStart(2, '0')}:00`,
+  wakes: 1,
+}))
+
+test('醒来上限可配置：默认仍 12，hardCapWakes 放开到窗口总和，绝对上限 48', () => {
+  const wins = hourly17()
+  assert.equal(wins.length, 17)
+  assert.equal(maxWakes(cfg(wins)), 12, '默认不改变别人的行为 ✓')
+  assert.equal(maxWakes({ ...cfg(wins), hardCapWakes: 17 }), 17)
+  assert.equal(maxWakes({ ...cfg(wins), hardCapWakes: 999 }), 17, '上限再大也不能超过窗口总和')
+  assert.equal(maxWakes({ ...cfg([{ start: '00:00', end: '24:00', wakes: 100 }]), hardCapWakes: 999 }), 48,
+    '绝对上限 48（单窗口也夹到 48）')
+  assert.equal(maxWakes({ ...cfg([{ start: '07:00', end: '24:00', wakes: 30 }]), hardCapWakes: 20 }), 20,
+    '单个窗口也不再被 12 夹住')
+  assert.equal(maxWakes({ ...cfg(wins), hardCapWakes: 0 }), 12, '非法值落回默认 12')
+})
+
+test('放开上限后，17 个一小时窗口真的能各醒一次', () => {
+  const c = { ...cfg(hourly17()), hardCapWakes: 17 }
+  let state = {}, now = time('21T00:00:00'), count = 0
+  while (count < 30) {
+    const p = makePlan(c, state, now, () => 0)
+    if (p.action === 'done') break
+    state = completePlan(p, p.atMs)
+    now = p.atMs + 60_000
+    count += 1
+  }
+  assert.equal(count, 17, '一天正好 17 次，不多不少')
+  assert.equal(makePlan(c, state, now, () => 0).action, 'done')
+})
+
 test('skip 只消耗一次机会，wakes>1 的窗口不会被整段作废', () => {
   // 2026-10-22 实测（她连报三次的那个）：窗口 03:47–04:10 wakes:5，
   // 掷到不看之后整个窗口被拉黑 → 只醒 1 次就 done ✗

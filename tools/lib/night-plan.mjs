@@ -12,15 +12,28 @@ const parse = (s) => {
   if (h > 24 || m > 59 || (h === 24 && m !== 0)) throw new Error(`无效作息时间：${s}`)
   return h * 60 + m
 }
+// ── 全天能醒几次：从写死的 12 改成可配置 ─────────────────────────────────────
+// 2026-10-27：主人要「7 点到 23 点每小时醒一次」= 一天 17 次，但 12 是三处硬编码
+//   （这里两处 + lib/index.js 保存时的夹取），光加窗口没用。
+//   现在默认仍是 12（不改变别人的行为），需要更多就在配置里写 night.hardCapWakes ✓
+//   注意：这里只放开「上限」，一天到底醒几次仍由各个窗口的 wakes 相加决定。
+export const WAKE_CAP_DEFAULT = 12
+export const WAKE_CAP_MAX = 48
+export const hardCap = (cfg = {}) => {
+  const v = Number(cfg?.hardCapWakes)
+  if (!Number.isFinite(v) || v <= 0) return WAKE_CAP_DEFAULT
+  return Math.min(WAKE_CAP_MAX, Math.floor(v))
+}
+
 export function windowsOf(cfg) {
   const list = Array.isArray(cfg.windows) ? cfg.windows : [{ start: cfg.windowStart ?? '20:00', end: cfg.windowEnd ?? '24:00', wakes: cfg.maxWakesPerDay ?? 1 }]
   return list.map(w => {
     const start = parse(w.start), rawEnd = parse(w.end)
     const end = rawEnd <= start ? rawEnd + 1440 : rawEnd
-    return { start, end, wrap: end > 1440, label: `${w.start}–${w.end}`, wakes: Math.min(12, Math.max(0, Math.floor(Number(w.wakes ?? 1) || 0))) }
+    return { start, end, wrap: end > 1440, label: `${w.start}–${w.end}`, wakes: Math.min(WAKE_CAP_MAX, Math.max(0, Math.floor(Number(w.wakes ?? 1) || 0))) }
   })
 }
-export const maxWakes = cfg => Math.min(12, windowsOf(cfg).reduce((n, w) => n + w.wakes, 0))
+export const maxWakes = cfg => Math.min(hardCap(cfg), windowsOf(cfg).reduce((n, w) => n + w.wakes, 0))
 export function occurrences(cfg, now = Date.now()) {
   const today = dayOf(now), yesterday = new Date(`${today}T00:00:00`)
   yesterday.setDate(yesterday.getDate() - 1)
